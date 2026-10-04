@@ -1,119 +1,44 @@
 class EvidenceStore:
-    """
-    Armazena e gerencia evidências do sistema KALATRACE.
-    Cada evidência pode sustentar um ou mais IECs.
-    """
+    """Armazena evidências e o índice reverso por IEC."""
 
     def __init__(self):
-        # estrutura principal: evidências por id
         self.evidences = {}
-
-        # índice reverso: IEC -> evidências
         self.iec_index = {}
 
-    # -----------------------------
-    # 1. ADICIONAR EVIDÊNCIA
-    # -----------------------------
     def add_evidence(self, evidence_id, content, source_type="unknown", reliability=0.5, provenance=None):
-        """
-        Registra uma nova evidência no sistema.
-        """
-
         self.evidences[evidence_id] = {
-            "id": evidence_id,
-            "content": content,
-            "source_type": source_type,
-            "reliability": float(reliability),
+            "id": evidence_id, "content": content, "source_type": source_type,
+            "reliability": float(reliability), "provenance": dict(provenance or {}),
             "linked_iec": set(),
         }
 
-    # -----------------------------
-    # 2. LIGAR EVIDÊNCIA A IEC
-    # -----------------------------
     def link_to_iec(self, evidence_id, iec_id):
-        """
-        Conecta uma evidência a um IEC específico.
-        """
-
         if evidence_id not in self.evidences:
             raise ValueError(f"Evidência {evidence_id} não existe")
-
         self.evidences[evidence_id]["linked_iec"].add(iec_id)
+        self.iec_index.setdefault(iec_id, set()).add(evidence_id)
 
-        if iec_id not in self.iec_index:
-            self.iec_index[iec_id] = set()
-
-        self.iec_index[iec_id].add(evidence_id)
-
-    # -----------------------------
-    # 3. RECUPERAR EVIDÊNCIAS DE UM IEC
-    # -----------------------------
     def get_evidence_for_iec(self, iec_id):
-        """
-        Retorna todas as evidências associadas a um IEC.
-        """
-
         evidence_ids = self.iec_index.get(iec_id, set())
+        return [self.evidences[eid] for eid in evidence_ids if eid in self.evidences]
 
-        return [
-            self.evidences[eid]
-            for eid in evidence_ids
-            if eid in self.evidences
-        ]
-
-    # -----------------------------
-    # 4. CALCULAR FORÇA DE EVIDÊNCIA
-    # -----------------------------
     def compute_evidence_strength(self, iec_id):
-        """
-        Calcula força agregada das evidências de um IEC.
-        """
-
         evidences = self.get_evidence_for_iec(iec_id)
-
         if not evidences:
             return 0.0
+        return sum(e["reliability"] for e in evidences) / len(evidences)
 
-        total = sum(e["reliability"] for e in evidences)
-
-        return total / len(evidences)
-
-    # -----------------------------
-    # 5. REMOVER EVIDÊNCIA
-    # -----------------------------
     def remove_evidence(self, evidence_id):
-        """
-        Remove evidência e suas conexões.
-        """
-
         if evidence_id not in self.evidences:
             return
-
-        linked = self.evidences[evidence_id]["linked_iec"]
-
-        for iec_id in linked:
+        for iec_id in self.evidences[evidence_id]["linked_iec"]:
             if iec_id in self.iec_index:
                 self.iec_index[iec_id].discard(evidence_id)
-
         del self.evidences[evidence_id]
 
-    # -----------------------------
-    # 6. ESTADO DO SISTEMA
-    # -----------------------------
     def stats(self):
-        return {
-            "total_evidences": len(self.evidences),
-            "linked_iec": len(self.iec_index),
-        }
+        return {"total_evidences": len(self.evidences), "linked_iec": len(self.iec_index)}
 
-    # -----------------------------
-    # 7. DEBUG
-    # -----------------------------
     def __repr__(self):
         s = self.stats()
-        return (
-            f"EvidenceStore("
-            f"evidences={s['total_evidences']}, "
-            f"linked_iec={s['linked_iec']}"
-            f")"
-        )
+        return f"EvidenceStore(evidences={s['total_evidences']}, linked_iec={s['linked_iec']})"
