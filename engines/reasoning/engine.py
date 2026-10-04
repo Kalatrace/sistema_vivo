@@ -13,8 +13,9 @@ class ReasoningEngine:
     evidência adicional para uma futura camada de decisão/validação.
     """
 
-    def __init__(self, graph):
+    def __init__(self, graph, evidence_store=None):
         self.graph = graph
+        self.evidence_store = evidence_store
 
     # -----------------------------
     # 1. INFERÊNCIA ESTRUTURAL
@@ -78,6 +79,43 @@ class ReasoningEngine:
         return connections
 
     # -----------------------------
+    # 3. INFERÊNCIA POR EVIDÊNCIA
+    # -----------------------------
+    def infer_evidence_connections(self, node_id):
+        """Sugere IECs que compartilham evidência com o nó informado.
+
+        A sugestão é somente cognitiva: nenhuma aresta é criada aqui. O
+        compartilhamento de evidência é um sinal para camadas superiores
+        avaliarem, nunca uma prova automática de relação entre conceitos.
+        """
+        if not self.evidence_store or not self.graph.get_node(node_id):
+            return []
+
+        evidence_ids = {
+            evidence["id"]
+            for evidence in self.evidence_store.get_evidence_for_iec(node_id)
+        }
+        if not evidence_ids:
+            return []
+
+        candidates = {}
+        for candidate_id in self.graph.nodes:
+            if candidate_id == node_id:
+                continue
+            shared = {
+                evidence["id"]
+                for evidence in self.evidence_store.get_evidence_for_iec(candidate_id)
+                if evidence["id"] in evidence_ids
+            }
+            if shared:
+                candidates[candidate_id] = sorted(shared)
+
+        return [
+            {"node_id": candidate_id, "shared_evidence": evidence_ids}
+            for candidate_id, evidence_ids in candidates.items()
+        ]
+
+    # -----------------------------
     # 3. INFERÊNCIA UNIFICADA
     # -----------------------------
     def infer(self, node_id, semantic_threshold=0.55):
@@ -94,6 +132,7 @@ class ReasoningEngine:
                 node_id,
                 threshold=semantic_threshold,
             ),
+            "evidence_connections": self.infer_evidence_connections(node_id),
         }
 
     # -----------------------------
