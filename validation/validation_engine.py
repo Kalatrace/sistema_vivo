@@ -72,6 +72,24 @@ class ValidationEngine:
             "threshold": threshold,
         }
 
+    def evaluate_relation_conflict(self, source, target):
+        """Avalia se supports e contradicts coexistem para o mesmo par."""
+        relations = [
+            edge for edge in self.graph.edges
+            if {edge["source"], edge["target"]} == {source, target}
+        ]
+        supports = [edge for edge in relations if edge.get("type") == "supports"]
+        contradicts = [edge for edge in relations if edge.get("type") == "contradicts"]
+        conflict = bool(supports and contradicts)
+        return {
+            "source": source,
+            "target": target,
+            "conflict": conflict,
+            "supports": len(supports),
+            "contradicts": len(contradicts),
+            "status": "conflicted" if conflict else "consistent",
+        }
+
     def validate_edge(self, edge):
         source = edge["source"]
         target = edge["target"]
