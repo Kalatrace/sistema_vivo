@@ -1,164 +1,200 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class LifecycleManager:
     """
     Orquestrador central do ciclo de vida do conhecimento no KALATRACE.
+
+    A persistência é opcional: o Kernel continua funcionando em memória,
+    mas pode agora salvar e reconstruir seu estado epistemológico.
     """
 
-    def __init__(self, graph, evidence_store, validator, reasoner):
+    def __init__(
+        self,
+        graph,
+        evidence_store,
+        validator,
+        reasoner,
+        persistence=None,
+    ):
         self.graph = graph
         self.evidence_store = evidence_store
         self.validator = validator
         self.reasoner = reasoner
+        self.persistence = persistence
 
-    # -----------------------------
-    # 1. CRIAÇÃO DE CONHECIMENTO
-    # -----------------------------
     def create_iec(self, iec):
-        """
-        Registra um novo IEC no sistema.
-        """
-
-        iec.created_at = datetime.now()
+        iec.created_at = datetime.now(timezone.utc)
         self.graph.add_node(iec)
-
         return iec.id
 
-    # -----------------------------
-    # 2. REGISTRO DE EVIDÊNCIA
-    # -----------------------------
     def attach_evidence(self, iec_id, evidence_id, content, reliability=0.5):
-        """
-        Cria e vincula evidência a um IEC.
-        """
-
         self.evidence_store.add_evidence(
             evidence_id=evidence_id,
             content=content,
-            reliability=reliability
+            reliability=reliability,
         )
-
         self.evidence_store.link_to_iec(evidence_id, iec_id)
 
-    # -----------------------------
-    # 3. CONECTAR CONHECIMENTO
-    # -----------------------------
     def connect(self, source_id, target_id, relation_type="related", weight=1.0):
-        """
-        Cria relação entre dois IECs.
-        """
-
         self.graph.add_edge(
             source=source_id,
             target=target_id,
             relation_type=relation_type,
-            weight=weight
+            weight=weight,
         )
 
-    # -----------------------------
-    # 4. CICLO DE VALIDAÇÃO
-    # -----------------------------
     def validate(self, iec_id=None):
-        """
-        Valida um IEC específico ou todo o sistema.
-        """
-
         if iec_id:
             return self.validator.validate_iec(iec_id)
+        if hasattr(self.validator, "validate_all"):
+            return self.validator.validate_all()
+        return self.validator.validate_graph()
 
-        return self.validator.validate_all()
-
-    # -----------------------------
-    # 5. RACIOCÍNIO (INFERÊNCIA)
-    # -----------------------------
     def reason(self, iec_id):
-        """
-        Executa inferência sobre um IEC.
-        """
+        return self.reasoner.infer_connections(iec_id)
 
-        suggestions = self.reasoner.infer_connections(iec_id)
-
-        return suggestions
-
-    # -----------------------------
-    # 6. ATUALIZAÇÃO DO CONHECIMENTO
-    # -----------------------------
     def update_iec(self, iec_id):
-        """
-        Atualiza estado de um IEC com base em evidência e rede.
-        """
-
         iec = self.graph.get_node(iec_id)
         if not iec:
             return None
 
-        # 1. validar
         validation_result = self.validator.validate_iec(iec_id)
-
-        # 2. propagar confiança no grafo
         self.reasoner.propagate_confidence(iec_id)
-
-        # 3. atualizar timestamp
-        iec.updated_at = datetime.now()
-
+        iec.updated_at = datetime.now(timezone.utc)
         return validation_result
 
-    # -----------------------------
-    # 7. REMOÇÃO CONTROLADA
-    # -----------------------------
+    def persist(self, owner_id):
+        """Persiste o estado epistemológico atual no backend configurado."""
+        if self.persistence is None:
+            raise RuntimeError("Nenhuma camada de persistência foi configurada.")
+        return self.persistence.persist_graph(
+            self.graph,
+            self.evidence_store,
+            owner_id,
+        )
+
+    def restore(self, owner_id):
+        """
+        Reconstrói o estado em memória a partir do Supabase.
+
+        Retorna contagens e mantém os mesmos IDs externos usados pelo Kernel.
+        """
+        if self.persistence is None:
+            raise RuntimeError("Nenhuma camada de persistência foi configurada.")
+
+        from knowledge.iec import IEC
+
+        state = self.persistence.recover_graph(owner_id)
+
+        self.graph.nodes.clear()
+        self.graph.edges.clear()
+        self.evidence_store.evidences.clear()
+        self.evidence_store.iec_index.clear()
+
+        node_by_db_id = {}
+
+        for row in state["iecs"]:
+            methodology = row.get("methodology") or {}
+            result = row.get("result") or {}
+            external_id = methodology.get("external_id") or row["name"]
+
+            iec = IEC(
+                id=external_id,
+                content=row["statement"],
+                domain=methodology.get("domain"),
+            )
+            iec.sources = list(methodology.get("sources") or [])
+            iec.confidence = float(result.get("confidence", 0.5))
+            iec.created_at = row.get("created_at")
+            iec.updated_at = row.get("updated_at")
+
+            self.graph.add_node(iec)
+            node_by_db_id[
+                self.persistence.stable_uuid("node", str(external_id))
+            ] = external_id
+
+        for row in state["knowledge_edges"]:
+            props = row.get("properties") or {}
+            source = node_by_db_id.get(row["source_node_id"])
+            target = node_by_db_id.get(row["target_node_id"])
+            if source is None or target is None:
+                continue
+
+            self.graph.add_edge(
+                source=source,
+                target=target,
+                relation_type=row.get("edge_type", "related"),
+                weight=float(props.get("weight", 1.0)),
+                confidence=float(props.get("confidence", 0.5)),
+                evidence=props.get("evidence", []),
+            )
+
+        for row in state["evidence"]:
+            metadata = row.get("metadata") or {}
+            external_id = metadata.get("external_id") or row["id"]
+            self.evidence_store.add_evidence(
+                evidence_id=external_id,
+                content=row.get("content") or "",
+                source_type=row.get("evidence_type", "unknown"),
+                reliability=float(row.get("reliability") or 0.5),
+            )
+            for iec_id in metadata.get("iec_external_ids", []):
+                self.evidence_store.link_to_iec(external_id, iec_id)
+
+        return {
+            "iecs": len(self.graph.nodes),
+            "edges": len(self.graph.edges),
+            "evidence": len(self.evidence_store.evidences),
+        }
+
     def remove_iec(self, iec_id, threshold=0.2):
-        """
-        Remove conhecimento fraco ou inválido.
-        """
-
         iec = self.graph.get_node(iec_id)
-        if not iec:
+        if not iec or iec.confidence > threshold:
             return False
-
-        if iec.confidence > threshold:
-            return False  # ainda é considerado válido
-
         self.graph.remove_node(iec_id)
-
         return True
 
-    # -----------------------------
-    # 8. CICLO COMPLETO AUTOMÁTICO
-    # -----------------------------
     def run_cycle(self):
-        """
-        Executa ciclo completo de manutenção do sistema.
-        """
+        if hasattr(self.validator, "report"):
+            report = self.validator.report()
+        else:
+            report = self.validator.validate_graph()
 
-        report = self.validator.report()
-        weak = self.validator.weak_knowledge()
+        if hasattr(self.validator, "weak_knowledge"):
+            weak = self.validator.weak_knowledge()
+        else:
+            weak = self.validator.weak_nodes()
 
         removed = []
 
-        # 1. validar sistema inteiro
-        self.validator.validate_all()
+        if hasattr(self.validator, "validate_all"):
+            self.validator.validate_all()
+        else:
+            self.validator.validate_graph()
 
-        # 2. atualizar todos os nós
-        for iec_id in self.graph.nodes:
+        for iec_id in list(self.graph.nodes):
             self.reasoner.propagate_confidence(iec_id)
 
-        # 3. remover conhecimento muito fraco
-        for iec in weak:
-            if self.remove_iec(iec.id):
-                removed.append(iec.id)
+        for item in weak:
+            iec_id = item.id if hasattr(item, "id") else item.get("iec")
+            if iec_id and self.remove_iec(iec_id):
+                removed.append(iec_id)
 
         return {
             "report": report,
             "removed_nodes": removed,
         }
 
-    # -----------------------------
-    # 9. ESTADO DO SISTEMA
-    # -----------------------------
     def status(self):
+        quality = (
+            self.validator.system_quality_score()
+            if hasattr(self.validator, "system_quality_score")
+            else self.validator.validate_graph()
+        )
         return {
             "graph": self.graph.stats(),
             "evidence": self.evidence_store.stats(),
-            "system_quality": self.validator.system_quality_score(),
+            "system_quality": quality,
+            "persistence": self.persistence is not None,
         }
