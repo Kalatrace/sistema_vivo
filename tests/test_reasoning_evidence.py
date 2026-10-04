@@ -95,7 +95,7 @@ class RelationPromotionTests(unittest.TestCase):
 
         self.assertTrue(first["promoted"])
         self.assertFalse(second["promoted"])
-        self.assertEqual("relation_conflict", second["decision"]["reason"])
+        self.assertEqual("relation_conflict", second["decision"]["reason"])\n        self.assertEqual("conflicted", second["decision"]["status"])\n        self.assertEqual(["contradiction"], second["decision"]["conflict"]["candidate_evidence"])
         self.assertEqual(["support"], second["decision"]["conflict"]["support_evidence"])
         self.assertEqual([], second["decision"]["conflict"]["contradiction_evidence"])
         self.assertEqual(1, len(self.graph.edges))
