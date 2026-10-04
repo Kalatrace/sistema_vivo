@@ -7,7 +7,7 @@ from engines.reasoning.engine import ReasoningEngine
 
 class ReasoningAgent(BaseAgent):
     name = "reasoning"
-    capabilities = ("graph_reasoning", "semantic_reasoning", "conflict_detection")
+    capabilities = ("graph_reasoning", "semantic_reasoning", "evidence_reasoning", "conflict_detection")
 
     def __init__(self, reasoning_engine: ReasoningEngine, agent_id: str = None):
         super().__init__(agent_id=agent_id)
