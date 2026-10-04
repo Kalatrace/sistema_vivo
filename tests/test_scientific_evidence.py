@@ -4,6 +4,7 @@ from engines.scientific_research.evidence import ScientificEvidenceBridge
 from graph.knowledge_graph import KnowledgeGraph
 from knowledge.iec import IEC
 from memory.evidence_store import EvidenceStore
+from validation.validation_engine import ValidationEngine
 
 
 class ScientificEvidenceBridgeTests(unittest.TestCase):
@@ -63,7 +64,7 @@ class ScientificEvidenceBridgeTests(unittest.TestCase):
         self.assertEqual(2, len(evidence_ids))
         self.assertEqual(2, len(store.get_evidence_for_iec(iec.id)))
         self.assertEqual(0.9, store.compute_evidence_strength(iec.id))
-        self.assertEqual(1, graph.stats()["nodes"])
+        self.assertEqual(1, graph.stats()["nodes"])\n\n        validation = ValidationEngine(graph, store).validate_iec(iec.id)\n        self.assertEqual("strong", validation["status"])\n        self.assertEqual(2, validation["evidence_count"])
 
 
 if __name__ == "__main__":
