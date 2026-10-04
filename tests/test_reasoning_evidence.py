@@ -30,6 +30,55 @@ class ReasoningEvidenceTests(unittest.TestCase):
         graph.add_node(IEC(id="iec-a", content="A", embedding=[1.0, 0.0]))
         self.assertEqual([], ReasoningEngine(graph).infer_evidence_connections("iec-a"))
 
+from core.lifecycle_manager import LifecycleManager
+from validation.validation_engine import ValidationEngine
+
+
+class RelationPromotionTests(unittest.TestCase):
+    def setUp(self):
+        self.graph = KnowledgeGraph()
+        self.store = EvidenceStore()
+        self.validator = ValidationEngine(self.graph, self.store)
+        self.reasoner = ReasoningEngine(self.graph, self.store)
+        self.lifecycle = LifecycleManager(
+            self.graph, self.store, self.validator, self.reasoner
+        )
+        self.graph.add_node(IEC(id="a", content="A", embedding=[1.0, 0.0]))
+        self.graph.add_node(IEC(id="b", content="B", embedding=[0.0, 1.0]))
+
+    def test_strong_evidence_promotes_relation(self):
+        self.store.add_evidence(
+            "ev", {"title": "Paper"}, source_type="scientific:crossref", reliability=0.9
+        )
+        self.store.link_to_iec("ev", "a")
+        self.store.link_to_iec("ev", "b")
+
+        result = self.lifecycle.promote_relation("a", "b", ["ev"], relation_type="supports")
+
+        self.assertTrue(result["promoted"])
+        self.assertEqual(1, len(self.graph.edges))
+        self.assertEqual(["ev"], self.graph.edges[0]["evidence"])
+        self.assertEqual(0.9, self.graph.edges[0]["confidence"])
+
+    def test_weak_evidence_does_not_promote_relation(self):
+        self.store.add_evidence(
+            "ev", {"title": "Weak"}, source_type="scientific:crossref", reliability=0.4
+        )
+        self.store.link_to_iec("ev", "a")
+        self.store.link_to_iec("ev", "b")
+
+        result = self.lifecycle.promote_relation("a", "b", ["ev"])
+
+        self.assertFalse(result["promoted"])
+        self.assertEqual("insufficient_support", result["decision"]["reason"])
+        self.assertEqual(0, len(self.graph.edges))
+
+    def test_missing_evidence_is_rejected(self):
+        result = self.lifecycle.promote_relation("a", "b", ["missing"])
+        self.assertFalse(result["promoted"])
+        self.assertEqual("missing_evidence", result["decision"]["reason"])
+        self.assertEqual(0, len(self.graph.edges))
+
 
 if __name__ == "__main__":
     unittest.main()
