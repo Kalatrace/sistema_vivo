@@ -14,7 +14,7 @@ class EvidenceStore:
     # -----------------------------
     # 1. ADICIONAR EVIDÊNCIA
     # -----------------------------
-    def add_evidence(self, evidence_id, content, source_type="unknown", reliability=0.5):
+    def add_evidence(self, evidence_id, content, source_type="unknown", reliability=0.5, provenance=None):
         """
         Registra uma nova evidência no sistema.
         """
