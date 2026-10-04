@@ -28,7 +28,7 @@ class LifecycleManager:
     # -----------------------------
     # 2. REGISTRO DE EVIDÊNCIA
     # -----------------------------
-    def attach_evidence(self, iec_id, evidence_id, content, reliability=0.5):
+    def attach_evidence(self, iec_id, evidence_id, content, reliability=0.5, source_type="unknown", provenance=None):
         """
         Cria e vincula evidência a um IEC.
         """
