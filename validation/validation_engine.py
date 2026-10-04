@@ -32,6 +32,46 @@ class ValidationEngine:
             "evidence_count": len(evidence),
         }
 
+    def evaluate_edge_candidate(self, source, target, evidence_ids, weight=1.0, threshold=0.75):
+        """Avalia uma relação candidata antes de permitir sua promoção ao grafo."""
+        if not source or not target:
+            raise ValueError("source e target são obrigatórios")
+        if source == target:
+            return {"eligible": False, "reason": "self_relation", "score": 0.0}
+        if source not in self.graph.nodes or target not in self.graph.nodes:
+            return {"eligible": False, "reason": "missing_iec", "score": 0.0}
+
+        evidence_ids = list(evidence_ids or [])
+        if not evidence_ids:
+            return {"eligible": False, "reason": "no_evidence", "score": 0.0}
+
+        available = {item["id"]: item for item in self.evidence_store.get_evidence_for_iec(source)}
+        target_available = {item["id"]: item for item in self.evidence_store.get_evidence_for_iec(target)}
+        evidence = []
+        for evidence_id in evidence_ids:
+            item = available.get(evidence_id) or target_available.get(evidence_id)
+            if item is None:
+                return {"eligible": False, "reason": "missing_evidence", "evidence_id": evidence_id, "score": 0.0}
+            evidence.append(item)
+
+        source_val = self.validate_iec(source)
+        target_val = self.validate_iec(target)
+        evidence_strength = sum(item["reliability"] for item in evidence) / len(evidence)
+        node_support = (source_val["confidence"] + target_val["confidence"]) / 2
+        score = (node_support + evidence_strength) / 2
+
+        return {
+            "eligible": score >= threshold,
+            "reason": "validated" if score >= threshold else "insufficient_support",
+            "source": source,
+            "target": target,
+            "evidence_ids": evidence_ids,
+            "evidence_strength": evidence_strength,
+            "node_support": node_support,
+            "score": score,
+            "threshold": threshold,
+        }
+
     def validate_edge(self, edge):
         source = edge["source"]
         target = edge["target"]
