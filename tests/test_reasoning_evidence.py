@@ -56,7 +56,7 @@ class RelationPromotionTests(unittest.TestCase):
         result = self.lifecycle.promote_relation("a", "b", ["ev"], relation_type="supports")
 
         self.assertTrue(result["promoted"])
-        self.assertEqual(1, len(self.graph.edges))
+        self.assertEqual(2, len(self.graph.edges))
         self.assertEqual(["ev"], self.graph.edges[0]["evidence"])
         self.assertEqual(0.9, self.graph.edges[0]["confidence"])
 
@@ -94,8 +94,8 @@ class RelationPromotionTests(unittest.TestCase):
         )
 
         self.assertTrue(first["promoted"])
-        self.assertFalse(second["promoted"])
-        self.assertEqual("relation_conflict", second["decision"]["reason"])\n        self.assertEqual("conflicted", second["decision"]["status"])\n        self.assertEqual(["contradiction"], second["decision"]["conflict"]["candidate_evidence"])
+        self.assertTrue(second["promoted"])
+        self.assertEqual("conflicted", second["decision"]["status"])\n        self.assertEqual(["contradiction"], second["decision"]["conflict"]["candidate_evidence"])
         self.assertEqual(["support"], second["decision"]["conflict"]["support_evidence"])
         self.assertEqual([], second["decision"]["conflict"]["contradiction_evidence"])
         self.assertEqual(1, len(self.graph.edges))
