@@ -60,7 +60,7 @@ def create_iec(payload: IECIn):
 @app.post("/iec/{iec_id}/evidence")
 def attach_evidence(iec_id: str, payload: EvidenceIn):
     lifecycle.attach_evidence(iec_id=iec_id, evidence_id=payload.evidence_id,
-                               content=payload.content, reliability=payload.reliability)
+                               content=payload.content, reliability=payload.reliability, source_type=payload.source_type)
     return {"status": "attached", "iec": iec_id, "evidence": payload.evidence_id}
 
 @app.post("/relations/promote")
