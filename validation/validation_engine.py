@@ -73,13 +73,15 @@ class ValidationEngine:
         }
 
     def evaluate_relation_conflict(self, source, target):
-        """Avalia se supports e contradicts coexistem para o mesmo par."""
+        """Descreve evidências divergentes sem apagar nenhum dos lados."""
         relations = [
             edge for edge in self.graph.edges
             if {edge["source"], edge["target"]} == {source, target}
         ]
         supports = [edge for edge in relations if edge.get("type") == "supports"]
         contradicts = [edge for edge in relations if edge.get("type") == "contradicts"]
+        support_evidence = sorted({eid for edge in supports for eid in edge.get("evidence", [])})
+        contradiction_evidence = sorted({eid for edge in contradicts for eid in edge.get("evidence", [])})
         conflict = bool(supports and contradicts)
         return {
             "source": source,
@@ -87,6 +89,8 @@ class ValidationEngine:
             "conflict": conflict,
             "supports": len(supports),
             "contradicts": len(contradicts),
+            "support_evidence": support_evidence,
+            "contradiction_evidence": contradiction_evidence,
             "status": "conflicted" if conflict else "consistent",
         }
 
