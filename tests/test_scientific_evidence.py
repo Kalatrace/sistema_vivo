@@ -16,6 +16,7 @@ class ScientificEvidenceBridgeTests(unittest.TestCase):
             "query": "skin regeneration",
             "title": "Paper A",
             "doi": "10.1/a",
+            "url": "https://example.org/paper",
         }
 
         evidence_id = bridge.ingest("iec-research", result, reliability=0.9)
@@ -25,6 +26,10 @@ class ScientificEvidenceBridgeTests(unittest.TestCase):
         self.assertEqual("scientific:crossref", evidence["source_type"])
         self.assertEqual(0.9, evidence["reliability"])
         self.assertEqual("10.1/a", evidence["content"]["doi"])
+        self.assertEqual("crossref", evidence["provenance"]["provider"])
+        self.assertEqual("skin regeneration", evidence["provenance"]["query"])
+        self.assertEqual("10.1/a", evidence["provenance"]["external_id"])
+        self.assertEqual("https://example.org/paper", evidence["provenance"]["url"])
 
     def test_stable_identifier(self):
         result = {"provider": "pubmed", "pmid": "123", "title": "Paper"}
@@ -64,7 +69,11 @@ class ScientificEvidenceBridgeTests(unittest.TestCase):
         self.assertEqual(2, len(evidence_ids))
         self.assertEqual(2, len(store.get_evidence_for_iec(iec.id)))
         self.assertEqual(0.9, store.compute_evidence_strength(iec.id))
-        self.assertEqual(1, graph.stats()["nodes"])\n\n        validation = ValidationEngine(graph, store).validate_iec(iec.id)\n        self.assertEqual("strong", validation["status"])\n        self.assertEqual(2, validation["evidence_count"])
+        self.assertEqual(1, graph.stats()["nodes"])
+
+        validation = ValidationEngine(graph, store).validate_iec(iec.id)
+        self.assertEqual("strong", validation["status"])
+        self.assertEqual(2, validation["evidence_count"])
 
 
 if __name__ == "__main__":
