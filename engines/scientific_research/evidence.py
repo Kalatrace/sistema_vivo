@@ -46,6 +46,12 @@ class ScientificEvidenceBridge:
             content=dict(result),
             source_type=f"scientific:{provider}",
             reliability=float(reliability),
+            provenance={
+                "provider": provider,
+                "query": result.get("query"),
+                "external_id": result.get("doi") or result.get("id"),
+                "url": result.get("url") or result.get("link"),
+            },
         )
         self.evidence_store.link_to_iec(evidence_id, iec_id)
         return evidence_id
