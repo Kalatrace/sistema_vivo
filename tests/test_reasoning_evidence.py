@@ -73,6 +73,39 @@ class RelationPromotionTests(unittest.TestCase):
         self.assertEqual("insufficient_support", result["decision"]["reason"])
         self.assertEqual(0, len(self.graph.edges))
 
+    def test_conflicting_relation_preserves_both_evidence_sides(self):
+        support = "support"
+        contradiction = "contradiction"
+        for evidence_id in (support, contradiction):
+            self.store.add_evidence(
+                evidence_id,
+                {"title": evidence_id},
+                source_type="scientific:crossref",
+                reliability=0.9,
+            )
+            self.store.link_to_iec(evidence_id, "a")
+            self.store.link_to_iec(evidence_id, "b")
+
+        first = self.lifecycle.promote_relation(
+            "a", "b", [support], relation_type="supports"
+        )
+        second = self.lifecycle.promote_relation(
+            "a", "b", [contradiction], relation_type="contradicts"
+        )
+
+        self.assertTrue(first["promoted"])
+        self.assertFalse(second["promoted"])
+        self.assertEqual("relation_conflict", second["decision"]["reason"])
+        self.assertEqual(["support"], second["decision"]["conflict"]["support_evidence"])
+        self.assertEqual([], second["decision"]["conflict"]["contradiction_evidence"])
+        self.assertEqual(1, len(self.graph.edges))
+
+        evidence_data = self.store.get_evidence_for_iec("a")
+        self.assertEqual(
+            {"support", "contradiction"},
+            {item["id"] for item in evidence_data},
+        )
+
     def test_missing_evidence_is_rejected(self):
         result = self.lifecycle.promote_relation("a", "b", ["missing"])
         self.assertFalse(result["promoted"])
