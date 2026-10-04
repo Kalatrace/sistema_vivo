@@ -65,7 +65,7 @@ class RelationPromotionTests(unittest.TestCase):
         second = self.lifecycle.promote_relation("a", "b", ["contradiction"], relation_type="contradicts")
         self.assertTrue(first["promoted"])
         self.assertTrue(second["promoted"])
-        self.assertEqual("conflicted", second["decision"]["status"])
+        self.assertEqual("conflicted", second["decision"].get("status"))
         self.assertEqual(["contradiction"], second["decision"]["conflict"]["candidate_evidence"])
         self.assertEqual(["support"], second["decision"]["conflict"]["support_evidence"])
         self.assertEqual([], second["decision"]["conflict"]["contradiction_evidence"])
