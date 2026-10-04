@@ -1,0 +1,80 @@
+import unittest
+
+from core.lifecycle_manager import LifecycleManager
+from engines.reasoning.engine import ReasoningEngine
+from graph.knowledge_graph import KnowledgeGraph
+from knowledge.iec import IEC
+from memory.evidence_store import EvidenceStore
+from validation.validation_engine import ValidationEngine
+
+
+class KernelVerticalTest(unittest.TestCase):
+    def setUp(self):
+        self.graph = KnowledgeGraph()
+        self.evidence = EvidenceStore()
+        self.validator = ValidationEngine(self.graph, self.evidence)
+        self.reasoner = ReasoningEngine(self.graph)
+        self.lifecycle = LifecycleManager(
+            self.graph,
+            self.evidence,
+            self.validator,
+            self.reasoner,
+        )
+
+    def test_create_attach_validate_and_reason(self):
+        self.lifecycle.create_iec(
+            IEC(id="a", content="alpha", domain="test")
+        )
+        self.lifecycle.create_iec(
+            IEC(id="b", content="beta", domain="test")
+        )
+        self.lifecycle.create_iec(
+            IEC(id="c", content="gamma", domain="test")
+        )
+
+        self.lifecycle.attach_evidence(
+            "a",
+            "e1",
+            "evidence for alpha",
+            reliability=0.9,
+        )
+        self.lifecycle.connect("a", "b")
+        self.lifecycle.connect("b", "c")
+
+        self.assertIn("e1", self.evidence.iec_index["a"])
+        self.assertEqual(self.evidence.compute_evidence_strength("a"), 0.9)
+
+        validation = self.lifecycle.validate("a")
+        self.assertEqual(validation["iec_id"], "a")
+        self.assertEqual(validation["evidence_count"], 1)
+
+        inferred = self.reasoner.infer_connections("a")
+        self.assertEqual([item.id for item in inferred], ["c"])
+
+    def test_semantic_reasoning_is_available_without_replacing_graph_reasoning(self):
+        first = IEC(id="a", content="alpha beta gamma", domain="test")
+        second = IEC(id="b", content="alpha beta gamma", domain="test")
+        third = IEC(id="c", content="unrelated", domain="test")
+
+        self.graph.add_node(first)
+        self.graph.add_node(second)
+        self.graph.add_node(third)
+
+        semantic = self.reasoner.infer_semantic_connections("a", threshold=0.9)
+        self.assertTrue(any(target == "b" for _, target, _ in semantic))
+
+        unified = self.reasoner.infer("a", semantic_threshold=0.9)
+        self.assertIn("graph_connections", unified)
+        self.assertIn("semantic_connections", unified)
+
+    def test_missing_iec_is_safe(self):
+        self.assertEqual(self.reasoner.infer_connections("missing"), [])
+        self.assertEqual(self.reasoner.infer_semantic_connections("missing"), [])
+        self.assertEqual(
+            self.reasoner.infer("missing")["graph_connections"],
+            [],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
