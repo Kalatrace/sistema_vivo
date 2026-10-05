@@ -72,8 +72,8 @@ class ValidationEngine:
             "threshold": threshold,
         }
 
-    def evaluate_relation_conflict(self, source, target):
-        """Descreve evidências divergentes sem apagar nenhum dos lados."""
+    def evaluate_relation_conflict(self, source, target, candidate_relation_type=None):
+        """Descreve conflito existente e conflito introduzido pela candidata."""
         relations = [
             edge for edge in self.graph.edges
             if {edge["source"], edge["target"]} == {source, target}
@@ -82,7 +82,13 @@ class ValidationEngine:
         contradicts = [edge for edge in relations if edge.get("type") == "contradicts"]
         support_evidence = sorted({eid for edge in supports for eid in edge.get("evidence", [])})
         contradiction_evidence = sorted({eid for edge in contradicts for eid in edge.get("evidence", [])})
-        conflict = bool(supports and contradicts)
+        existing_conflict = bool(supports and contradicts)
+        candidate_conflict = (
+            candidate_relation_type == "supports" and bool(contradicts)
+        ) or (
+            candidate_relation_type == "contradicts" and bool(supports)
+        )
+        conflict = existing_conflict or candidate_conflict
         return {
             "source": source,
             "target": target,
