@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from core.lifecycle_manager import LifecycleManager
+from engines.curation import CurationEngine
 from engines.reasoning.engine import ReasoningEngine
 from graph.knowledge_graph import KnowledgeGraph
 from knowledge.iec import IEC
@@ -19,6 +20,7 @@ graph = KnowledgeGraph()
 evidence_store = EvidenceStore()
 validator = ValidationEngine(graph, evidence_store)
 reasoner = ReasoningEngine(graph, evidence_store=evidence_store)
+curation = CurationEngine(graph)
 lifecycle = LifecycleManager(graph, evidence_store, validator, reasoner)
 
 app = FastAPI(title="KALATRACE Kernel API")
@@ -44,6 +46,16 @@ class RelationIn(BaseModel):
     relation_type: str = "supports"
     weight: float = 1.0
     threshold: float = 0.75
+
+class ReliabilityIn(BaseModel):
+    factors: dict[str, float]
+    weights: dict[str, float] | None = None
+
+class KnowledgeStateIn(BaseModel):
+    maturity_score: float
+    reliability_score: float
+    has_active_conflict: bool = False
+    superseded_by: str | None = None
 
 @app.get("/health")
 def health():
@@ -78,6 +90,30 @@ def reason(iec_id: str):
 def validate(iec_id: str):
     return validator.validate_iec(iec_id)
 
+@app.get("/curation/gaps")
+def curation_gaps():
+    return {"gaps": curation.detect_gaps()}
+
+@app.get("/curation/duplicates")
+def curation_duplicates(threshold: float = 0.92):
+    if threshold < 0.0 or threshold > 1.0:
+        raise ValueError("O threshold deve estar entre 0 e 1")
+    return {"duplicates": curation.detect_duplicates(threshold=threshold), "threshold": threshold}
+
+@app.post("/curation/reliability")
+def curation_reliability(payload: ReliabilityIn):
+    return {"score": curation.reliability_score(payload.factors, payload.weights)}
+
+@app.post("/curation/knowledge-state")
+def curation_knowledge_state(payload: KnowledgeStateIn):
+    state = curation.classify_knowledge_state(
+        payload.maturity_score,
+        payload.reliability_score,
+        has_active_conflict=payload.has_active_conflict,
+        superseded_by=payload.superseded_by,
+    )
+    return {"state": state}
+
 @app.get("/graph")
 def get_graph():
     return {"nodes": {node_id: {"content": node.content, "domain": node.domain,
@@ -89,4 +125,4 @@ def get_graph():
 def status():
     return lifecycle.status()
 
-__all__ = ["app", "graph", "evidence_store", "validator", "reasoner", "lifecycle"]
+__all__ = ["app", "graph", "evidence_store", "validator", "reasoner", "curation", "lifecycle"]
