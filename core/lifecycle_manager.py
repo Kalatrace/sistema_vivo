@@ -40,7 +40,7 @@ class LifecycleManager:
         if not decision["eligible"]:
             return {"promoted": False, "decision": decision}
 
-        conflict = self.validator.evaluate_relation_conflict(source_id, target_id)
+        conflict = self.validator.evaluate_relation_conflict(source_id, target_id, candidate_relation_type=relation_type)
         if conflict["conflict"]:
             decision["status"] = "conflicted"
             decision["conflict"] = dict(conflict)
